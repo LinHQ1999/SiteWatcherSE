@@ -1,0 +1,28 @@
+{
+  "name": "scrapers",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "bin": "dist/index",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.13.1",
+  "dependencies": {
+    "cheerio": "^1.1.2",
+    "commander": "^14.0.0",
+    "fastify": "^5.5.0",
+    "node-notifier": "^10.0.1",
+    "playwright": "^1.55.0"
+  },
+  "devDependencies": {
+    "fastify-tsconfig": "^3.0.0",
+    "nodemon": "^3.1.10",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
