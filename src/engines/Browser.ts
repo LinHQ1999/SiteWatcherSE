@@ -23,60 +23,82 @@ export class BrowserEngine implements Scraper {
   }
 
   public async compare(siteInfo: TSiteQuery, save = true) {
-    const { site, selector } = siteInfo;
+    try {
+      const { site, selector } = siteInfo;
 
-    if (!site) return;
-
-    this.sites.add(site);
-
-    let context;
-    if (this.browser.contexts().length === 0) {
-      context = await this.browser.newContext(devices["Desktop Chrome"]);
-    } else {
-      context = this.browser.contexts()[0];
-    }
-
-    const page = await context.newPage();
-    await page.goto(site, { timeout: 30000 });
-
-    let body = "";
-    if (selector) {
-      const allTitles = await Promise.all((await page.$$(selector.title)).map(title => title.textContent()));
-      const allContents = await Promise.all((await page.$$(selector.content)).map(content => content.textContent()));
-
-      body = this.paraIntersect(allTitles, allContents);
-    } else {
-      body = await (await page.$("body"))?.textContent() ?? "";
-    }
-
-    let updated = false;
-    if (save) {
-      try {
-        const recent = await db.select({
-          parsed: siteTable.parsed
-        }).from(siteTable).where(eq(siteTable.site, site)).orderBy(desc(siteTable.timestamp)).limit(1);
-        updated = recent.length > 0 && recent[0].parsed !== body || recent.length === 0;
-        if (updated) {
-          await db.insert(siteTable).values({
-            site,
-            timestamp: Date.now(),
-            parsed: body
-          });
-        }
-      } catch (e) {
-        console.log(e);
-        throw e;
+      if (!site) {
+        throw new Error('Site URL is required');
       }
-    }
 
-    return { content: body, updated: updated };
+      this.sites.add(site);
+
+      // Always create a new context for isolation
+      const context = await this.browser.newContext(devices["Desktop Chrome"]);
+      const page = await context.newPage();
+      
+      try {
+        await page.goto(site, { timeout: 30000, waitUntil: 'domcontentloaded' });
+
+        let body = "";
+        if (selector) {
+          // Wait for selectors to be present
+          try {
+            await page.waitForSelector(selector.title, { timeout: 5000 });
+            await page.waitForSelector(selector.content, { timeout: 5000 });
+          } catch (e) {
+            console.warn(`Selectors not found for ${site}:`, e);
+          }
+          
+          const allTitles = await Promise.all(
+            (await page.$$(selector.title)).map(title => title.textContent())
+          );
+          const allContents = await Promise.all(
+            (await page.$$(selector.content)).map(content => content.textContent())
+          );
+
+          body = this.paraIntersect(allTitles, allContents);
+        } else {
+          body = await (await page.$("body"))?.textContent() ?? "";
+        }
+
+        let updated = false;
+        if (save) {
+          try {
+            const recent = await db.select({
+              parsed: siteTable.parsed
+            }).from(siteTable).where(eq(siteTable.site, site)).orderBy(desc(siteTable.timestamp)).limit(1);
+            
+            updated = recent.length === 0 || (recent[0].parsed !== body);
+            if (updated) {
+              await db.insert(siteTable).values({
+                site,
+                timestamp: Date.now(),
+                parsed: body
+              });
+            }
+          } catch (e) {
+            console.error('Database error:', e);
+            throw e;
+          }
+        }
+
+        return { content: body, updated };
+      } finally {
+        await page.close();
+        await context.close();
+      }
+    } catch (error) {
+      console.error(`Error processing ${siteInfo.site}:`, error);
+      throw error;
+    }
   }
 
   public async stop() {
     try {
       await this.browser.close();
       return true;
-    } catch (_e) {
+    } catch (e) {
+      console.error('Error closing browser:', e);
       return false;
     }
   }
