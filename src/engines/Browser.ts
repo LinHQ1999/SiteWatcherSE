@@ -1,0 +1,88 @@
+import { Browser, devices, chromium } from "playwright";
+import { Scraper, TSiteQuery } from "../scraper";
+import db from '../dao';
+import { siteTable } from "../db/schema";
+import { desc, eq } from "drizzle-orm";
+
+export class BrowserEngine implements Scraper {
+  private browser;
+  private sites: Set<string> = new Set();
+
+  constructor(browser: Browser) {
+    this.browser = browser;
+  }
+
+  private paraIntersect(titles: (string | null)[], contents: (string | null)[]) {
+    let res = [];
+    const maxLen = Math.min(titles.length, contents.length);
+    for (let i = 0; i < maxLen - 1; i++) {
+      res.push(`${titles[i]}\n${contents[i]}`);
+    }
+
+    return res.join("\n\n");
+  }
+
+  public async compare(siteInfo: TSiteQuery, save = true) {
+    const { site, selector } = siteInfo;
+
+    if (!site) return;
+
+    this.sites.add(site);
+
+    let context;
+    if (this.browser.contexts().length === 0) {
+      context = await this.browser.newContext(devices["Desktop Chrome"]);
+    } else {
+      context = this.browser.contexts()[0];
+    }
+
+    const page = await context.newPage();
+    await page.goto(site, { timeout: 30000 });
+
+    let body = "";
+    if (selector) {
+      const allTitles = await Promise.all((await page.$$(selector.title)).map(title => title.textContent()));
+      const allContents = await Promise.all((await page.$$(selector.content)).map(content => content.textContent()));
+
+      body = this.paraIntersect(allTitles, allContents);
+    } else {
+      body = await (await page.$("body"))?.textContent() ?? "";
+    }
+
+    let updated = false;
+    if (save) {
+      try {
+        const recent = await db.select({
+          parsed: siteTable.parsed
+        }).from(siteTable).where(eq(siteTable.site, site)).orderBy(desc(siteTable.timestamp)).limit(1);
+        updated = recent.length > 0 && recent[0].parsed !== body || recent.length === 0;
+        if (updated) {
+          await db.insert(siteTable).values({
+            site,
+            timestamp: Date.now(),
+            parsed: body
+          });
+        }
+      } catch (e) {
+        console.log(e);
+        throw e;
+      }
+    }
+
+    return { content: body, updated: updated };
+  }
+
+  public async stop() {
+    try {
+      await this.browser.close();
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  static async create() {
+    const browser = await chromium.launch();
+    return new BrowserEngine(browser);
+  }
+}

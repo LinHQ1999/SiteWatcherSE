@@ -6,7 +6,7 @@
   "bin": "dist/index",
   "type": "module",
   "scripts": {
-    "dev": "nodemon --watch 'src/**/*.ts' --exec 'tsx src/index.ts'",
+    "dev": "dotenv -- tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -16,15 +16,22 @@
   "license": "ISC",
   "packageManager": "pnpm@10.13.1",
   "dependencies": {
+    "@fastify/type-provider-typebox": "^5.2.0",
+    "@libsql/client": "^0.15.14",
+    "@sinclair/typebox": "^0.34.41",
     "cheerio": "^1.1.2",
     "commander": "^14.0.0",
+    "drizzle-orm": "^0.44.5",
     "fastify": "^5.5.0",
+    "fluent-json-schema": "^6.0.0",
     "node-notifier": "^10.0.1",
     "playwright": "^1.55.0"
   },
   "devDependencies": {
+    "@types/node": "^24.3.0",
+    "dotenv-cli": "^10.0.0",
+    "drizzle-kit": "^0.31.4",
     "fastify-tsconfig": "^3.0.0",
-    "nodemon": "^3.1.10",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }
