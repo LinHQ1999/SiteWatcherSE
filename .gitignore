@@ -5,3 +5,5 @@ dist
 drizzle
 Session.vim
 sitedata.db
+.env
+.env

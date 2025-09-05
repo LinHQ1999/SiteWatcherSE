@@ -1,0 +1,16 @@
+[
+  {
+    "selector": {
+      "content": ".device-stats-wrapper",
+      "title": ".device-header"
+    },
+    "site": "https://en.tankiwiki.com/Augments"
+  },
+  {
+    "selector": {
+      "content": ".btzy",
+      "title": ".timebox"
+    },
+    "site": "https://foaie.ccnu.edu.cn/xwzx/tzgg.htm"
+  }
+]

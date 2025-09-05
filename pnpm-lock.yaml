@@ -42,6 +42,9 @@ importers:
       '@types/node':
         specifier: ^24.3.0
         version: 24.3.0
+      '@types/node-notifier':
+        specifier: ^8.0.5
+        version: 8.0.5
       dotenv-cli:
         specifier: ^10.0.0
         version: 10.0.0
@@ -451,6 +454,9 @@ packages:
 
   '@sinclair/typebox@0.34.41':
     resolution: {integrity: sha512-6gS8pZzSXdyRHTIqoqSVknxolr1kzfy4/CeDnrzsVz8TTIWUbOBr6gnzOmTYJ3eXQNh4IYHIGi5aIL7sOZ2G/g==}
+
+  '@types/node-notifier@8.0.5':
+    resolution: {integrity: sha512-LX7+8MtTsv6szumAp6WOy87nqMEdGhhry/Qfprjm1Ma6REjVzeF7SCyvPtp5RaF6IkXCS9V4ra8g5fwvf2ZAYg==}
 
   '@types/node@24.3.0':
     resolution: {integrity: sha512-aPTXCrfwnDLj4VvXrm+UUCQjNEvJgNA8s5F1cvwQU+3KNltTOkBm1j30uNLyqqPNe7gE3KFzImYoZEfLhp4Yow==}
@@ -1230,6 +1236,10 @@ snapshots:
   '@neon-rs/load@0.0.4': {}
 
   '@sinclair/typebox@0.34.41': {}
+
+  '@types/node-notifier@8.0.5':
+    dependencies:
+      '@types/node': 24.3.0
 
   '@types/node@24.3.0':
     dependencies:

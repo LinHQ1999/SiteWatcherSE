@@ -1,8 +1,8 @@
 import { Browser, devices, chromium } from "playwright";
-import { Scraper, TSiteQuery } from "../scraper";
-import db from '../dao';
-import { siteTable } from "../db/schema";
 import { desc, eq } from "drizzle-orm";
+import db from "../dao.js";
+import { siteTable } from "../db/schema.js";
+import { Scraper, TSiteQuery } from "../scraper.js";
 
 export class BrowserEngine implements Scraper {
   private browser;
@@ -35,7 +35,7 @@ export class BrowserEngine implements Scraper {
       // Always create a new context for isolation
       const context = await this.browser.newContext(devices["Desktop Chrome"]);
       const page = await context.newPage();
-      
+
       try {
         await page.goto(site, { timeout: 30000, waitUntil: 'domcontentloaded' });
 
@@ -48,7 +48,7 @@ export class BrowserEngine implements Scraper {
           } catch (e) {
             console.warn(`Selectors not found for ${site}:`, e);
           }
-          
+
           const allTitles = await Promise.all(
             (await page.$$(selector.title)).map(title => title.textContent())
           );
@@ -67,7 +67,7 @@ export class BrowserEngine implements Scraper {
             const recent = await db.select({
               parsed: siteTable.parsed
             }).from(siteTable).where(eq(siteTable.site, site)).orderBy(desc(siteTable.timestamp)).limit(1);
-            
+
             updated = recent.length === 0 || (recent[0].parsed !== body);
             if (updated) {
               await db.insert(siteTable).values({

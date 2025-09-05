@@ -1,9 +1,9 @@
 import { program } from 'commander';
 import { readFile } from 'fs/promises';
-import { BrowserEngine } from './engines/Browser';
 import notifier from 'node-notifier';
-import { TSiteQuery } from './scraper';
-import { StartServer } from './server';
+import { BrowserEngine } from './engines/Browser.js';
+import { TSiteQuery } from './scraper.js';
+import { StartServer } from './server.js';
 
 program.name('swatcher')
   .description('watch sites defined in json file');
@@ -18,7 +18,7 @@ program.command('once')
       const engine = await BrowserEngine.create();
       try {
         const results = await Promise.allSettled(cfgParsed.map(cfg => engine.compare(cfg)));
-        
+
         console.log(`访问完成，总共 ${cfgParsed.length} 个站`);
         results.forEach((result, idx) => {
           if (result.status === 'fulfilled' && result.value?.updated) {
@@ -37,7 +37,7 @@ program.command('once')
   });
 
 program.command('serve')
-  .action(StartServer);
+  .action(() => StartServer(3002));
 
 
 program.parse();

@@ -14,3 +14,4 @@ export interface Scraper {
   compare: (siteInfo: TSiteQuery, save?: boolean) => Promise<{ content: string, updated: boolean; } | undefined>;
   stop: () => Promise<boolean>;
 }
+
