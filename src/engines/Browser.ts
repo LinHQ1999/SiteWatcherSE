@@ -17,7 +17,7 @@ export class BrowserEngine implements Scraper {
     this.loginProfile = login;
   }
 
-  private paraIntersect(titles: (string | null)[], contents: (string | null)[]) {
+  private paraIntersect(titles: (string | undefined)[], contents: (string | undefined)[]) {
     let res = [];
     const maxLen = Math.min(titles.length, contents.length);
     for (let i = 0; i < maxLen - 1; i++) {
@@ -51,12 +51,12 @@ export class BrowserEngine implements Scraper {
         console.warn(`Selectors not found for ${site}:`, e);
       }
 
-      const allTitles = await Promise.all(
+      const allTitles = (await Promise.all(
         (await page.$$(selector.title)).map(title => title.textContent())
-      );
-      const allContents = await Promise.all(
+      )).map(title => title?.trim());
+      const allContents = (await Promise.all(
         (await page.$$(selector.content)).map(content => content.textContent())
-      );
+      )).map(content => content?.trim());
 
       return this.paraIntersect(allTitles, allContents);
     } else {
