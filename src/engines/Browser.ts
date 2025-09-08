@@ -3,16 +3,18 @@ import { desc, eq } from "drizzle-orm";
 import type database from "../dao.js";
 import { siteTable } from "../db/schema.js";
 import { Scraper, TSiteQuery } from "../scraper.js";
-import { diffLatest } from "../dao.js";
+import { diffLatest, getProfileState, saveProfileState } from "../dao.js";
 
 export class BrowserEngine implements Scraper {
   private browser;
   private db;
+  private loginProfile;
   private sites: Set<string> = new Set();
 
-  constructor(browser: Browser, db: typeof database) {
+  constructor(browser: Browser, db: typeof database, login: string) {
     this.browser = browser;
     this.db = db;
+    this.loginProfile = login;
   }
 
   private paraIntersect(titles: (string | null)[], contents: (string | null)[]) {
@@ -28,7 +30,14 @@ export class BrowserEngine implements Scraper {
   private async fetchSite(siteInfo: TSiteQuery) {
     const { site, selector } = siteInfo;
 
-    const context = await this.browser.newContext(devices["Desktop Chrome"]);
+    let context;
+    if (!!this.loginProfile) {
+      const state = JSON.parse(await getProfileState(this.loginProfile));
+      context = await this.browser.newContext({ ...devices["Desktop Chrome"], storageState: state });
+    } else {
+      context = await this.browser.newContext(devices["Desktop Chrome"]);
+    }
+
     const page = await context.newPage();
 
     await page.goto(site, { timeout: 30000, waitUntil: 'domcontentloaded' });
@@ -36,8 +45,8 @@ export class BrowserEngine implements Scraper {
     if (selector) {
       // Wait for selectors to be present
       try {
-        await page.waitForSelector(selector.title, { timeout: 5000 });
-        await page.waitForSelector(selector.content, { timeout: 5000 });
+        await page.waitForSelector(selector.title, { timeout: 50000 });
+        await page.waitForSelector(selector.content, { timeout: 50000 });
       } catch (e) {
         console.warn(`Selectors not found for ${site}:`, e);
       }
@@ -105,8 +114,21 @@ export class BrowserEngine implements Scraper {
     }
   }
 
-  static async create(db: typeof database) {
-    const browser = await chromium.launch();
-    return new BrowserEngine(browser, db);
+  public async doLogin(url: string, finishedURL?: string) {
+    const ctx = await this.browser.newContext();
+    const page = await ctx.newPage();
+    await page.goto(url);
+    if (finishedURL) {
+      await page.waitForURL(finishedURL);
+    } else {
+      await page.waitForEvent('close', { timeout: 300000 });
+    }
+    return await saveProfileState(this.loginProfile, JSON.stringify(await ctx.storageState()));
+  }
+
+  static async create(db: typeof database, loginProfile = "", headless = true) {
+    const browser = await chromium.launch({ headless });
+
+    return new BrowserEngine(browser, db, loginProfile);
   }
 }

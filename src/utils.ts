@@ -1,0 +1,32 @@
+import { type ExecException, spawn } from "child_process";
+import { mkdtemp, writeFile } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import { promisify } from "util";
+
+function isExecErr(e: any): e is ExecException {
+  return typeof e.stderr === 'string';
+}
+
+export async function diff(strA: string | null, strB: string | null) {
+  if (!strA || !strB) return;
+
+  try {
+    const tmp = await mkdtemp(join(tmpdir(), 'swatcher-'));
+
+    const strATmpPath = join(tmp, `strA`);
+    const strBTmpPath = join(tmp, `strB`);
+
+    await Promise.all([
+      writeFile(strATmpPath, strA, 'utf8'),
+      writeFile(strBTmpPath, strB, 'utf8')
+    ]);
+
+    return await promisify(spawn)("delta", [strATmpPath, strBTmpPath], { stdio: "inherit" });
+  } catch (e) {
+    if (isExecErr(e)) {
+      console.log(e.stderr);
+    }
+    process.exit(1);
+  }
+}

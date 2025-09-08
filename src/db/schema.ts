@@ -6,3 +6,9 @@ export const siteTable = sqliteTable("site_table", {
   timestamp: int().notNull(),
   parsed: text()
 });
+
+export const stateTable = sqliteTable("browser_state_table", {
+  id: int().primaryKey({ autoIncrement: true }),
+  profile: text().notNull().unique(),
+  state: text().notNull()
+});

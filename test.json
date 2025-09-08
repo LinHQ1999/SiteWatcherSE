@@ -1,16 +1,9 @@
 [
   {
     "selector": {
-      "content": ".device-stats-wrapper",
-      "title": ".device-header"
+      "content": ".page-block-children",
+      "title": ".ace-line"
     },
-    "site": "https://en.tankiwiki.com/Augments"
-  },
-  {
-    "selector": {
-      "content": ".btzy",
-      "title": ".timebox"
-    },
-    "site": "https://foaie.ccnu.edu.cn/xwzx/tzgg.htm"
+    "site": "https://w4x21kxqre.feishu.cn/wiki/EQu2wECUjixh57k3O9IcdTOrnse"
   }
 ]
