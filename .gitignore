@@ -3,7 +3,6 @@ node_modules
 .aider*
 dist
 drizzle
-Session.vim
-sitedata.db
-.env
+*.vim
+*.db
 .env

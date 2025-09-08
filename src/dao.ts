@@ -5,13 +5,13 @@ import { diff } from "./utils.js";
 import { TSiteQuery } from "./scraper.js";
 
 // 确保环境变量存在
-if (!process.env.DB_FILE_NAME) {
-    throw new Error('No such db file!');
+if (!process.env.SWATCHER_DB_FILE_NAME) {
+    throw new Error('Set SWATCHER_DB_FILE_NAME please!');
 }
 
 const db = drizzle({
     connection: {
-        url: process.env.DB_FILE_NAME
+        url: process.env.SWATCHER_DB_FILE_NAME
     },
     schema
 });
