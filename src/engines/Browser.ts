@@ -1,15 +1,18 @@
 import { Browser, devices, chromium } from "playwright";
 import { desc, eq } from "drizzle-orm";
-import db from "../dao.js";
+import type database from "../dao.js";
 import { siteTable } from "../db/schema.js";
 import { Scraper, TSiteQuery } from "../scraper.js";
+import { diffLatest } from "../dao.js";
 
 export class BrowserEngine implements Scraper {
   private browser;
+  private db;
   private sites: Set<string> = new Set();
 
-  constructor(browser: Browser) {
+  constructor(browser: Browser, db: typeof database) {
     this.browser = browser;
+    this.db = db;
   }
 
   private paraIntersect(titles: (string | null)[], contents: (string | null)[]) {
@@ -22,75 +25,74 @@ export class BrowserEngine implements Scraper {
     return res.join("\n\n");
   }
 
-  public async compare(siteInfo: TSiteQuery, save = true) {
-    try {
-      const { site, selector } = siteInfo;
+  private async fetchSite(siteInfo: TSiteQuery) {
+    const { site, selector } = siteInfo;
 
-      if (!site) {
-        throw new Error('Site URL is required');
-      }
+    const context = await this.browser.newContext(devices["Desktop Chrome"]);
+    const page = await context.newPage();
 
-      this.sites.add(site);
+    await page.goto(site, { timeout: 30000, waitUntil: 'domcontentloaded' });
 
-      // Always create a new context for isolation
-      const context = await this.browser.newContext(devices["Desktop Chrome"]);
-      const page = await context.newPage();
-
+    if (selector) {
+      // Wait for selectors to be present
       try {
-        await page.goto(site, { timeout: 30000, waitUntil: 'domcontentloaded' });
-
-        let body = "";
-        if (selector) {
-          // Wait for selectors to be present
-          try {
-            await page.waitForSelector(selector.title, { timeout: 5000 });
-            await page.waitForSelector(selector.content, { timeout: 5000 });
-          } catch (e) {
-            console.warn(`Selectors not found for ${site}:`, e);
-          }
-
-          const allTitles = await Promise.all(
-            (await page.$$(selector.title)).map(title => title.textContent())
-          );
-          const allContents = await Promise.all(
-            (await page.$$(selector.content)).map(content => content.textContent())
-          );
-
-          body = this.paraIntersect(allTitles, allContents);
-        } else {
-          body = await (await page.$("body"))?.textContent() ?? "";
-        }
-
-        let updated = false;
-        if (save) {
-          try {
-            const recent = await db.select({
-              parsed: siteTable.parsed
-            }).from(siteTable).where(eq(siteTable.site, site)).orderBy(desc(siteTable.timestamp)).limit(1);
-
-            updated = recent.length === 0 || (recent[0].parsed !== body);
-            if (updated) {
-              await db.insert(siteTable).values({
-                site,
-                timestamp: Date.now(),
-                parsed: body
-              });
-            }
-          } catch (e) {
-            console.error('Database error:', e);
-            throw e;
-          }
-        }
-
-        return { content: body, updated };
-      } finally {
-        await page.close();
-        await context.close();
+        await page.waitForSelector(selector.title, { timeout: 5000 });
+        await page.waitForSelector(selector.content, { timeout: 5000 });
+      } catch (e) {
+        console.warn(`Selectors not found for ${site}:`, e);
       }
-    } catch (error) {
-      console.error(`Error processing ${siteInfo.site}:`, error);
-      throw error;
+
+      const allTitles = await Promise.all(
+        (await page.$$(selector.title)).map(title => title.textContent())
+      );
+      const allContents = await Promise.all(
+        (await page.$$(selector.content)).map(content => content.textContent())
+      );
+
+      return this.paraIntersect(allTitles, allContents);
+    } else {
+      return await (await page.$("body"))?.textContent() ?? "";
     }
+
+  }
+
+  private async diffSave(siteInfo: TSiteQuery, content: string) {
+    const { site } = siteInfo;
+    try {
+      const recent = await this.db.select({
+        parsed: siteTable.parsed
+      }).from(siteTable).where(eq(siteTable.site, site)).orderBy(desc(siteTable.timestamp)).limit(1);
+
+      const updated = recent.length === 0 || (recent[0].parsed !== content);
+      if (updated) {
+        await this.db.insert(siteTable).values({
+          site,
+          timestamp: Date.now(),
+          parsed: content
+        });
+      }
+      return updated;
+    } catch (e) {
+      console.error('Database error:', e);
+      throw e;
+    }
+  }
+
+  public async compare(siteInfo: TSiteQuery, save = true) {
+    const { site } = siteInfo;
+
+    if (!site) {
+      throw new Error('Site URL is required');
+    }
+
+    this.sites.add(site);
+
+    const body = await this.fetchSite(siteInfo);
+    const updated = await this.diffSave(siteInfo, body);
+
+    if (updated) diffLatest(siteInfo);
+
+    return { content: body, updated: save ? updated : false };
   }
 
   public async stop() {
@@ -99,12 +101,12 @@ export class BrowserEngine implements Scraper {
       return true;
     } catch (e) {
       console.error('Error closing browser:', e);
-      return false;
+      throw e;
     }
   }
 
-  static async create() {
+  static async create(db: typeof database) {
     const browser = await chromium.launch();
-    return new BrowserEngine(browser);
+    return new BrowserEngine(browser, db);
   }
 }

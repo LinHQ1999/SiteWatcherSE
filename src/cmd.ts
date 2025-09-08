@@ -1,9 +1,11 @@
+#!/usr/bin/env node
 import { program } from 'commander';
 import { readFile } from 'fs/promises';
 import notifier from 'node-notifier';
 import { BrowserEngine } from './engines/Browser.js';
 import { TSiteQuery } from './scraper.js';
 import { StartServer } from './server.js';
+import db, { diffLatest } from './dao.js';
 
 program.name('swatcher')
   .description('watch sites defined in json file');
@@ -15,7 +17,7 @@ program.command('once')
     try {
       const cfg = await readFile(file, 'utf8');
       const cfgParsed = JSON.parse(cfg) as Array<TSiteQuery>;
-      const engine = await BrowserEngine.create();
+      const engine = await BrowserEngine.create(db);
       try {
         const results = await Promise.allSettled(cfgParsed.map(cfg => engine.compare(cfg)));
 
@@ -38,6 +40,15 @@ program.command('once')
 
 program.command('serve')
   .action(() => StartServer(3002));
+
+program.command('diff')
+  .argument('<file>', '配置文件')
+  .action(async (cfg: string) => {
+    const cfgs: Array<TSiteQuery> = JSON.parse(await readFile(cfg, 'utf8'));
+    for (const cfg of cfgs) {
+      await diffLatest(cfg);
+    }
+  });
 
 
 program.parse();

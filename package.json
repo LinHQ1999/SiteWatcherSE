@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "bin": "dist/index",
+  "bin": {
+    "swatcher": "dist/cmd.js"
+  },
   "type": "module",
   "scripts": {
     "dev": "dotenv -- tsx watch src/cmd.ts serve",

@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { BrowserEngine } from './engines/Browser.js';
 import { TSiteQuery, SiteQuery } from './scraper.js';
+import db from './dao.js';
 
 let browser: BrowserEngine | undefined;
 
@@ -21,12 +22,13 @@ fastify.post<{ Body: TSiteQuery; }>('/monitor', {
 });
 
 export async function StartServer(port = 3001) {
-  browser = await BrowserEngine.create();
-  fastify.listen({ port }, async (err, _addr) => {
-    if (err) {
-      fastify.log.error(err);
-      browser?.stop();
-      process.exit(1);
-    }
-  });
+  try {
+    browser = await BrowserEngine.create(db);
+    await fastify.listen({ port });
+  } catch (e) {
+
+    fastify.log.error(e);
+    browser?.stop();
+    process.exit(1);
+  }
 }
