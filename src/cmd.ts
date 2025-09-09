@@ -5,7 +5,7 @@ import notifier from 'node-notifier';
 import { BrowserEngine } from './engines/Browser.js';
 import { TSiteQuery } from './scraper.js';
 import { StartServer } from './server.js';
-import db, { getSiteHist, getSites } from './dao.js';
+import db, { clear, getSiteHist, getSites } from './dao.js';
 import { resolve } from 'path';
 import { select, checkbox, confirm } from '@inquirer/prompts';
 import { CliError, DB, diff } from './utils.js';
@@ -48,19 +48,20 @@ program.command('serve')
 program.command('diff')
   .action(async () => {
     const loading = ora("正在读取数据").start();
-    const sites = (await getSites()).map(site => ({ name: site.title || undefined, value: site.site }));
+    const sites = (await getSites());
     while (true) {
       try {
         loading.succeed(`${DB} 读取成功`);
         if (sites.length === 0) {
           throw new CliError('当前没有网站可供选择');
         }
-        const site = await select({
+        const siteID = await select({
           message: `选择一个网站`,
-          choices: sites,
+          choices: sites.map(site => ({ name: site.title || site.site, value: site.id })),
           loop: true
         });
-        const hists = await getSiteHist(site);
+
+        const hists = await getSiteHist(sites.find(site => site.id === siteID)?.site!);
         const histSelected = await checkbox({
           message: "选取两个需要比较的版本？",
           choices: hists.map(hist => ({
@@ -84,8 +85,8 @@ program.command('diff')
 program.command("clear")
   .description("清空数据")
   .action(async () => {
-    const res = await confirm({ message: "确实要清空数据吗？" });
-    if (res) await db.delete(siteTable);
+    const res = await confirm({ message: "确实要清空数据吗？", default: false });
+    if (res) await clear();
   });
 
 program.command("login")
