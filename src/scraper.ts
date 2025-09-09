@@ -4,7 +4,11 @@ export const SiteQuery = T.Object({
   site: T.String(),
   selector: T.Optional(T.Object({
     title: T.String(),
-    content: T.String()
+    content: T.String(),
+    dig: T.Optional(T.Object({
+      link: T.String(),
+      body: T.String()
+    }))
   }))
 });
 

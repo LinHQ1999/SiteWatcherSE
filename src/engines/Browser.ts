@@ -3,6 +3,7 @@ import { Scraper, TSiteQuery } from "../scraper.js";
 import { getProfileState, saveProfileState, saveSite } from "../dao.js";
 import ora from 'ora';
 import { c, timeouts } from "../utils.js";
+import { modifierNames } from "chalk";
 
 export class BrowserEngine implements Scraper {
   private browser;
@@ -19,11 +20,11 @@ export class BrowserEngine implements Scraper {
     return text.trim().replaceAll(/(\s){3,}/g, "$1");
   }
 
-  private docCompose(titles: (string | undefined)[], contents: (string | undefined)[]) {
+  private docCompose(titles: string[], contents: string[], subpages: string[]) {
     let res = [];
-    const maxLen = Math.min(titles.length, contents.length);
+    const maxLen = Math.min(titles.length, contents.length, subpages.length);
     for (let i = 0; i < maxLen - 1; i++) {
-      res.push(`${titles[i]}\n\n${contents[i]}`);
+      res.push(`${titles[i]}\n\n${contents[i]}\n\n${subpages[i]}`);
     }
 
     return res.join("\n".repeat(3));
@@ -31,7 +32,8 @@ export class BrowserEngine implements Scraper {
 
   private async fetchSite(siteInfo: TSiteQuery) {
     const { site, selector } = siteInfo;
-    const loader = ora(`准备访问：${siteInfo.site}`).start();
+
+    const o = ora(`准备访问：${siteInfo.site}`).start();
 
     let context;
     if (!!this.loginProfile) {
@@ -41,42 +43,50 @@ export class BrowserEngine implements Scraper {
       context = await this.browser.newContext(devices["Desktop Chrome"]);
     }
 
-    loader.text = "创建页面中";
+    o.text = "创建页面中";
     const page = await context.newPage();
 
-    loader.text = `等待 ${site} 加载`;
-    await page.goto(site, { timeout: 30000, waitUntil: 'domcontentloaded' });
+    o.text = `等待 ${site} 加载`;
+    await page.goto(site, { timeout: timeouts.SELECTOR, waitUntil: 'domcontentloaded' });
 
     if (selector) {
-      // Wait for selectors to be present
-      try {
-        loader.text = "等待选取元素出现";
-        await page.waitForSelector(selector.title, { timeout: timeouts.SELECTOR });
-        await page.waitForSelector(selector.content, { timeout: timeouts.SELECTOR });
-      } catch (e) {
-        console.warn(`Selectors not found for ${site}:`, e);
-        loader.fail("没有元素");
+      o.text = `正在提取页面`;
+      const allTitles = (await page.locator(selector.title).allTextContents()).map(this.format);
+      const allContents = (await page.locator(selector.content).allTextContents()).map(this.format);
+      const allSubPages: Array<string> = [];
+
+      if (selector.dig) {
+        o.text = `正在进一步提取页面 ${selector.dig.link}`;
+
+        for (const lo of await page.locator(selector.dig.link).all()) {
+          await lo.click({ modifiers: ['ControlOrMeta'] });
+          const page = await context.waitForEvent('page');
+          await page.waitForLoadState("networkidle");
+          const content = this.format(await page.locator(selector.dig?.body!).textContent({ timeout: timeouts.SELECTOR }) ?? "");
+          await page.close();
+          this.sleep(1500);
+          allSubPages.push(content);
+        }
       }
 
-      const allTitles = (await Promise.all(
-        (await page.$$(selector.title)).map(title => title.textContent())
-      )).map(this.format);
-      const allContents = (await Promise.all(
-        (await page.$$(selector.content)).map(content => content.textContent())
-      )).map(this.format);
-
-      loader.succeed("选择器应用成功！");
+      o.succeed("成功！");
       return {
-        content: this.docCompose(allTitles, allContents),
+        content: this.docCompose(allTitles, allContents, allSubPages),
         title: await page.title()
       };
     } else {
-      loader.fail("选择器应用失败！存储整个页面！");
+      o.fail("选择器应用失败！存储整个页面！");
       return {
         content: await (await page.$("body"))?.textContent() ?? "",
         title: await page.title()
       };
     }
+  }
+
+  private async sleep(ms: number) {
+    return new Promise(res => {
+      setTimeout(res, ms);
+    });
   }
 
   private async saveOrIgnore(siteInfo: TSiteQuery, content: string, title: string) {

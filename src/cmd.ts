@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 import { program } from 'commander';
-import { readFile } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
 import notifier from 'node-notifier';
 import { BrowserEngine } from './engines/Browser.js';
-import { TSiteQuery } from './scraper.js';
+import { SiteQuery, TSiteQuery } from './scraper.js';
 import { StartServer } from './server.js';
-import db, { clear, getSiteHist, getSites } from './dao.js';
-import { resolve } from 'path';
+import { clear, getSiteHist, getSites } from './dao.js';
+import { join, resolve } from 'path';
 import { select, checkbox, confirm } from '@inquirer/prompts';
 import { CliError, DB, diff } from './utils.js';
 import ora from 'ora';
-import { siteTable } from './db/schema.js';
+import { Type } from '@sinclair/typebox';
 
 program.name('swatcher')
   .description('watch sites defined in json file');
@@ -18,11 +18,12 @@ program.name('swatcher')
 program.command('once')
   .description("查看一次网站")
   .argument('<file>', '配置文件路径')
-  .action(async (file: string) => {
+  .option("--debug", "调试模式", false)
+  .action(async (file: string, options: { debug: boolean; }) => {
     try {
       const cfg = await readFile(file, 'utf8');
       const cfgParsed = JSON.parse(cfg) as Array<TSiteQuery>;
-      const engine = await BrowserEngine.create(resolve(file));
+      const engine = await BrowserEngine.create(resolve(file), !options.debug);
       try {
         const results = await Promise.allSettled(cfgParsed.map(cfg => engine.compare(cfg)));
 
@@ -97,6 +98,14 @@ program.command("login")
     const engine = await BrowserEngine.create(resolve(profile), false);
     await engine.doLogin(url, succURL);
     engine.stop();
+  });
+
+program.command("schema")
+  .description("生成 json schema")
+  .argument("<path>", "生成 schema 路径")
+  .action(async (path: string) => {
+    const schema = Type.Array(SiteQuery);
+    await writeFile(join(resolve(path), "swatcher.schema.json"), JSON.stringify(schema), 'utf8');
   });
 
 program.parse();
