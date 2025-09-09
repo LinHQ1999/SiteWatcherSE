@@ -16,6 +16,16 @@ const db = drizzle({
     schema
 });
 
+export function saveSite(site: typeof schema.siteTable.$inferInsert) {
+    return db.insert(schema.siteTable).values(site);
+}
+
+export function getLatest(site: typeof schema.siteTable.$inferSelect.site) {
+    return db.select({
+        parsed: schema.siteTable.parsed
+    }).from(schema.siteTable).where(eq(schema.siteTable.site, site)).orderBy(desc(schema.siteTable.timestamp)).limit(1);
+}
+
 export async function diffLatest(siteInfo: TSiteQuery) {
     const [latest, last] = await db.query.siteTable.findMany({
         columns: {
@@ -56,6 +66,7 @@ export async function saveProfileState(path: string, value: string) {
 export function getSites() {
     return db.select({
         site: schema.siteTable.site,
+        title: schema.siteTable.site_title
     }).from(schema.siteTable)
         .groupBy(schema.siteTable.site)
         .having(gte(count(), 2));

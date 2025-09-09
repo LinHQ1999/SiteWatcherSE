@@ -5,6 +5,20 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
 
+export class CliError implements Error {
+  public message;
+  public name = "CustomCliError";
+
+  constructor(message: string, name?: string) {
+    this.message = message;
+    if (name) this.name = name;
+  }
+
+  log() {
+    console.log(c.redBright(this.message));
+  }
+}
+
 function isExecErr(e: any): e is ExecException {
   return typeof e.stderr === 'string';
 }
@@ -27,7 +41,7 @@ export async function diff(strA: string | null, strB: string | null) {
       writeFile(strBTmpPath, strB, 'utf8')
     ]);
 
-    return await promisify(spawn)("delta", [strATmpPath, strBTmpPath], { stdio: "inherit" });
+    return await promisify(spawn)("delta", ["-s", "--true-color", "always", strATmpPath, strBTmpPath], { stdio: "inherit" });
   } catch (e) {
     if (isExecErr(e)) {
       console.log(e.stderr);

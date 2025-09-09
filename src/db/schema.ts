@@ -3,6 +3,7 @@ import { int, sqliteTable, text } from "drizzle-orm/sqlite-core";
 export const siteTable = sqliteTable("site_table", {
   id: int().primaryKey({ autoIncrement: true }),
   site: text().notNull(),
+  site_title: text(),
   timestamp: int().notNull(),
   parsed: text()
 });

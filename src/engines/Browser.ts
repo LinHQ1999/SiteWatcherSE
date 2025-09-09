@@ -1,20 +1,15 @@
 import { Browser, devices, chromium } from "playwright";
-import { desc, eq } from "drizzle-orm";
-import type database from "../dao.js";
-import { siteTable } from "../db/schema.js";
 import { Scraper, TSiteQuery } from "../scraper.js";
-import { diffLatest, getProfileState, saveProfileState } from "../dao.js";
+import { diffLatest, getLatest, getProfileState, saveProfileState, saveSite } from "../dao.js";
 import ora from 'ora';
 
 export class BrowserEngine implements Scraper {
   private browser;
-  private db;
   private loginProfile;
   private sites: Set<string> = new Set();
 
-  constructor(browser: Browser, db: typeof database, login: string) {
+  constructor(browser: Browser, login: string) {
     this.browser = browser;
-    this.db = db;
     this.loginProfile = login;
   }
 
@@ -30,7 +25,7 @@ export class BrowserEngine implements Scraper {
 
   private async fetchSite(siteInfo: TSiteQuery) {
     const { site, selector } = siteInfo;
-    const loader = ora("Creating Browser").start();
+    const loader = ora(`准备访问：${siteInfo.site}`).start();
 
     let context;
     if (!!this.loginProfile) {
@@ -64,26 +59,30 @@ export class BrowserEngine implements Scraper {
         (await page.$$(selector.content)).map(content => content.textContent())
       )).map(content => content?.trim());
 
-      loader.succeed("访问成功！");
-      return this.paraIntersect(allTitles, allContents);
+      loader.succeed("选择成功！");
+      return {
+        content: this.paraIntersect(allTitles, allContents),
+        title: await page.title()
+      };
     } else {
-      loader.fail("访问失败！");
-      return await (await page.$("body"))?.textContent() ?? "";
+      loader.fail("选择失败！存储整个页面！");
+      return {
+        content: await (await page.$("body"))?.textContent() ?? "",
+        title: await page.title()
+      };
     }
-
   }
 
-  private async diffSave(siteInfo: TSiteQuery, content: string) {
+  private async diffSave(siteInfo: TSiteQuery, content: string, title: string) {
     const { site } = siteInfo;
     try {
-      const recent = await this.db.select({
-        parsed: siteTable.parsed
-      }).from(siteTable).where(eq(siteTable.site, site)).orderBy(desc(siteTable.timestamp)).limit(1);
+      const recent = await getLatest(site);
 
       const updated = recent.length === 0 || (recent[0].parsed !== content);
       if (updated) {
-        await this.db.insert(siteTable).values({
+        await saveSite({
           site,
+          site_title: title,
           timestamp: Date.now(),
           parsed: content
         });
@@ -95,7 +94,7 @@ export class BrowserEngine implements Scraper {
     }
   }
 
-  public async compare(siteInfo: TSiteQuery, save = true) {
+  public async compare(siteInfo: TSiteQuery) {
     const { site } = siteInfo;
 
     if (!site) {
@@ -104,12 +103,13 @@ export class BrowserEngine implements Scraper {
 
     this.sites.add(site);
 
-    const body = await this.fetchSite(siteInfo);
-    const updated = await this.diffSave(siteInfo, body);
+    const { content, title } = await this.fetchSite(siteInfo);
+    const updated = await this.diffSave(siteInfo, content, title);
 
-    if (updated) diffLatest(siteInfo);
+    // 等待 diff 完成
+    if (updated) await diffLatest(siteInfo);
 
-    return { content: body, updated: save ? updated : false };
+    return { content, updated };
   }
 
   public async stop() {
@@ -134,9 +134,9 @@ export class BrowserEngine implements Scraper {
     return await saveProfileState(this.loginProfile, JSON.stringify(await ctx.storageState()));
   }
 
-  static async create(db: typeof database, loginProfile = "", headless = true) {
+  static async create(loginProfile = "", headless = true) {
     const browser = await chromium.launch({ headless });
 
-    return new BrowserEngine(browser, db, loginProfile);
+    return new BrowserEngine(browser, loginProfile);
   }
 }

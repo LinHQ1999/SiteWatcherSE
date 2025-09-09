@@ -7,8 +7,10 @@ import { TSiteQuery } from './scraper.js';
 import { StartServer } from './server.js';
 import db, { getSiteHist, getSites } from './dao.js';
 import { resolve } from 'path';
-import { select, checkbox } from '@inquirer/prompts';
-import { c, DB, diff } from './utils.js';
+import { select, checkbox, confirm } from '@inquirer/prompts';
+import { CliError, DB, diff } from './utils.js';
+import ora from 'ora';
+import { siteTable } from './db/schema.js';
 
 program.name('swatcher')
   .description('watch sites defined in json file');
@@ -20,11 +22,10 @@ program.command('once')
     try {
       const cfg = await readFile(file, 'utf8');
       const cfgParsed = JSON.parse(cfg) as Array<TSiteQuery>;
-      const engine = await BrowserEngine.create(db, resolve(file));
+      const engine = await BrowserEngine.create(resolve(file));
       try {
         const results = await Promise.allSettled(cfgParsed.map(cfg => engine.compare(cfg)));
 
-        console.log(`访问完成，总共 ${cfgParsed.length} 个站`);
         results.forEach((result, idx) => {
           if (result.status === 'fulfilled' && result.value?.updated) {
             notifier.notify(`${cfgParsed[idx].site} 更新！`);
@@ -46,30 +47,45 @@ program.command('serve')
 
 program.command('diff')
   .action(async () => {
-    try {
-      const sites = (await getSites()).map(site => ({ value: site.site }));
-      if (sites.length === 0) {
-        throw new Error('当前没有网站可供选择');
+    const loading = ora("正在读取数据").start();
+    const sites = (await getSites()).map(site => ({ name: site.title || undefined, value: site.site }));
+    while (true) {
+      try {
+        loading.succeed(`${DB} 读取成功`);
+        if (sites.length === 0) {
+          throw new CliError('当前没有网站可供选择');
+        }
+        const site = await select({
+          message: `选择一个网站`,
+          choices: sites,
+          loop: true
+        });
+        const hists = await getSiteHist(site);
+        const histSelected = await checkbox({
+          message: "选取两个需要比较的版本？",
+          choices: hists.map(hist => ({
+            value: hist.parsed,
+            name: new Date(hist.timestamp).toLocaleDateString()
+          })),
+          validate: choices => choices.length === 2
+        });
+        await diff(histSelected[0], histSelected[1]);
+        break;
+      } catch (e) {
+        if (e instanceof CliError) {
+          e.log();
+          break;
+        };
+        console.log('取消');
       }
-      const site = await select({
-        message: `FROM: ${DB}\n选择一个网站`,
-        choices: sites,
-        loop: true
-      });
-      const hists = await getSiteHist(site);
-      const histSelected = await checkbox({
-        message: "选取两个需要比较的版本？",
-        choices: hists.map(hist => ({
-          value: hist.parsed,
-          name: new Date(hist.timestamp).toLocaleDateString()
-        })),
-        validate: choices => choices.length === 2
-      });
-      await diff(histSelected[0], histSelected[1]);
-    } catch (e) {
-      console.log('取消');
-      process.exit(1);
     }
+  });
+
+program.command("clear")
+  .description("清空数据")
+  .action(async () => {
+    const res = await confirm({ message: "确实要清空数据吗？" });
+    if (res) await db.delete(siteTable);
   });
 
 program.command("login")
@@ -77,7 +93,7 @@ program.command("login")
   .argument("<url>", "登录页面链接")
   .argument("[succURL]", "登录页面跳转链接")
   .action(async (profile: string, url: string, succURL?: string) => {
-    const engine = await BrowserEngine.create(db, resolve(profile), false);
+    const engine = await BrowserEngine.create(resolve(profile), false);
     await engine.doLogin(url, succURL);
     engine.stop();
   });
