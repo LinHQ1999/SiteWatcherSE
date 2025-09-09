@@ -5,7 +5,7 @@ export const siteTable = sqliteTable("site_table", {
   site: text().notNull(),
   site_title: text(),
   timestamp: int().notNull(),
-  parsed: text()
+  parsed: text().unique()
 });
 
 export const stateTable = sqliteTable("browser_state_table", {

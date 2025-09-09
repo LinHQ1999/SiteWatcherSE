@@ -17,7 +17,9 @@ const db = drizzle({
 });
 
 export function saveSite(site: typeof schema.siteTable.$inferInsert) {
-    return db.insert(schema.siteTable).values(site);
+    return db.insert(schema.siteTable)
+        .values(site)
+        .onConflictDoNothing();
 }
 
 export function getLatest(site: typeof schema.siteTable.$inferSelect.site) {
@@ -65,6 +67,7 @@ export async function saveProfileState(path: string, value: string) {
  */
 export function getSites() {
     return db.select({
+        id: schema.siteTable.id,
         site: schema.siteTable.site,
         title: schema.siteTable.site_title
     }).from(schema.siteTable)
@@ -76,6 +79,10 @@ export function getSiteHist(site: string) {
     return db.query.siteTable.findMany({
         where: eq(schema.siteTable.site, site)
     });
+}
+
+export function clear() {
+    return Promise.all([db.delete(schema.stateTable), db.delete(schema.siteTable)]);
 }
 
 export default db;

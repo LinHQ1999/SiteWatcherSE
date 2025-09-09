@@ -1,7 +1,8 @@
 import { Browser, devices, chromium } from "playwright";
 import { Scraper, TSiteQuery } from "../scraper.js";
-import { diffLatest, getLatest, getProfileState, saveProfileState, saveSite } from "../dao.js";
+import { getProfileState, saveProfileState, saveSite } from "../dao.js";
 import ora from 'ora';
+import { c, timeouts } from "../utils.js";
 
 export class BrowserEngine implements Scraper {
   private browser;
@@ -13,14 +14,19 @@ export class BrowserEngine implements Scraper {
     this.loginProfile = login;
   }
 
-  private paraIntersect(titles: (string | undefined)[], contents: (string | undefined)[]) {
+  private format(text: string | null) {
+    if (!text) return "";
+    return text.trim().replaceAll(/(\s){3,}/g, "$1");
+  }
+
+  private docCompose(titles: (string | undefined)[], contents: (string | undefined)[]) {
     let res = [];
     const maxLen = Math.min(titles.length, contents.length);
     for (let i = 0; i < maxLen - 1; i++) {
-      res.push(`${titles[i]}\n${contents[i]}`);
+      res.push(`${titles[i]}\n\n${contents[i]}`);
     }
 
-    return res.join("\n\n");
+    return res.join("\n".repeat(3));
   }
 
   private async fetchSite(siteInfo: TSiteQuery) {
@@ -38,15 +44,15 @@ export class BrowserEngine implements Scraper {
     loader.text = "创建页面中";
     const page = await context.newPage();
 
-    loader.text = "等待页面加载";
+    loader.text = `等待 ${site} 加载`;
     await page.goto(site, { timeout: 30000, waitUntil: 'domcontentloaded' });
 
     if (selector) {
       // Wait for selectors to be present
       try {
         loader.text = "等待选取元素出现";
-        await page.waitForSelector(selector.title, { timeout: 50000 });
-        await page.waitForSelector(selector.content, { timeout: 50000 });
+        await page.waitForSelector(selector.title, { timeout: timeouts.SELECTOR });
+        await page.waitForSelector(selector.content, { timeout: timeouts.SELECTOR });
       } catch (e) {
         console.warn(`Selectors not found for ${site}:`, e);
         loader.fail("没有元素");
@@ -54,18 +60,18 @@ export class BrowserEngine implements Scraper {
 
       const allTitles = (await Promise.all(
         (await page.$$(selector.title)).map(title => title.textContent())
-      )).map(title => title?.trim());
+      )).map(this.format);
       const allContents = (await Promise.all(
         (await page.$$(selector.content)).map(content => content.textContent())
-      )).map(content => content?.trim());
+      )).map(this.format);
 
-      loader.succeed("选择成功！");
+      loader.succeed("选择器应用成功！");
       return {
-        content: this.paraIntersect(allTitles, allContents),
+        content: this.docCompose(allTitles, allContents),
         title: await page.title()
       };
     } else {
-      loader.fail("选择失败！存储整个页面！");
+      loader.fail("选择器应用失败！存储整个页面！");
       return {
         content: await (await page.$("body"))?.textContent() ?? "",
         title: await page.title()
@@ -73,21 +79,15 @@ export class BrowserEngine implements Scraper {
     }
   }
 
-  private async diffSave(siteInfo: TSiteQuery, content: string, title: string) {
+  private async saveOrIgnore(siteInfo: TSiteQuery, content: string, title: string) {
     const { site } = siteInfo;
     try {
-      const recent = await getLatest(site);
-
-      const updated = recent.length === 0 || (recent[0].parsed !== content);
-      if (updated) {
-        await saveSite({
-          site,
-          site_title: title,
-          timestamp: Date.now(),
-          parsed: content
-        });
-      }
-      return updated;
+      return (await saveSite({
+        site,
+        site_title: title,
+        timestamp: Date.now(),
+        parsed: content
+      })).rows.length > 0;
     } catch (e) {
       console.error('Database error:', e);
       throw e;
@@ -104,10 +104,10 @@ export class BrowserEngine implements Scraper {
     this.sites.add(site);
 
     const { content, title } = await this.fetchSite(siteInfo);
-    const updated = await this.diffSave(siteInfo, content, title);
+    const updated = await this.saveOrIgnore(siteInfo, content, title);
 
     // 等待 diff 完成
-    if (updated) await diffLatest(siteInfo);
+    if (updated) console.log(c.bgGreen(`${site} 有更新，可以用 diff 查看`));
 
     return { content, updated };
   }
@@ -129,7 +129,7 @@ export class BrowserEngine implements Scraper {
     if (finishedURL) {
       await page.waitForURL(finishedURL);
     } else {
-      await page.waitForEvent('close', { timeout: 300000 });
+      await page.waitForEvent('close', { timeout: timeouts.LOGIN });
     }
     return await saveProfileState(this.loginProfile, JSON.stringify(await ctx.storageState()));
   }

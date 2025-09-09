@@ -5,6 +5,12 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
 
+// playwright contants
+export const enum timeouts {
+  SELECTOR = 15000,
+  LOGIN = 500000
+}
+
 export class CliError implements Error {
   public message;
   public name = "CustomCliError";
