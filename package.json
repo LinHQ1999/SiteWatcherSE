@@ -20,14 +20,18 @@
   "packageManager": "pnpm@10.13.1",
   "dependencies": {
     "@fastify/type-provider-typebox": "^5.2.0",
+    "@inquirer/prompts": "^7.8.4",
     "@libsql/client": "^0.15.14",
     "@sinclair/typebox": "^0.34.41",
+    "chalk": "^5.6.2",
     "cheerio": "^1.1.2",
     "commander": "^14.0.0",
     "drizzle-orm": "^0.44.5",
     "fastify": "^5.5.0",
     "fluent-json-schema": "^6.0.0",
+    "inquirer": "^12.9.4",
     "node-notifier": "^10.0.1",
+    "ora": "^8.2.0",
     "playwright": "^1.55.0"
   },
   "devDependencies": {

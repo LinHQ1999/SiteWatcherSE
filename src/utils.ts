@@ -1,3 +1,4 @@
+import { Chalk } from "chalk";
 import { type ExecException, spawn } from "child_process";
 import { mkdtemp, writeFile } from "fs/promises";
 import { tmpdir } from "os";
@@ -7,6 +8,10 @@ import { promisify } from "util";
 function isExecErr(e: any): e is ExecException {
   return typeof e.stderr === 'string';
 }
+
+export const c = new Chalk({ level: 3 });
+
+export const DB = process.env.SWATCHER_DB_FILE_NAME;
 
 export async function diff(strA: string | null, strB: string | null) {
   if (!strA || !strB) return;

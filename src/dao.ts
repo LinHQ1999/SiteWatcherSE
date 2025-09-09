@@ -1,17 +1,17 @@
 import { drizzle } from "drizzle-orm/libsql/node";
 import * as schema from './db/schema.js';
-import { desc, eq } from "drizzle-orm";
-import { diff } from "./utils.js";
+import { count, desc, eq, gte } from "drizzle-orm";
+import { DB, diff } from "./utils.js";
 import { TSiteQuery } from "./scraper.js";
 
 // 确保环境变量存在
-if (!process.env.SWATCHER_DB_FILE_NAME) {
+if (!DB) {
     throw new Error('Set SWATCHER_DB_FILE_NAME please!');
 }
 
 const db = drizzle({
     connection: {
-        url: process.env.SWATCHER_DB_FILE_NAME
+        url: DB
     },
     schema
 });
@@ -47,6 +47,23 @@ export async function saveProfileState(path: string, value: string) {
     }).onConflictDoUpdate({
         target: [schema.stateTable.profile],
         set: { state: value }
+    });
+}
+
+/**
+ * 只返回有两条记录以上的
+ */
+export function getSites() {
+    return db.select({
+        site: schema.siteTable.site,
+    }).from(schema.siteTable)
+        .groupBy(schema.siteTable.site)
+        .having(gte(count(), 2));
+}
+
+export function getSiteHist(site: string) {
+    return db.query.siteTable.findMany({
+        where: eq(schema.siteTable.site, site)
     });
 }
 

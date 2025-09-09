@@ -4,6 +4,7 @@ import type database from "../dao.js";
 import { siteTable } from "../db/schema.js";
 import { Scraper, TSiteQuery } from "../scraper.js";
 import { diffLatest, getProfileState, saveProfileState } from "../dao.js";
+import ora from 'ora';
 
 export class BrowserEngine implements Scraper {
   private browser;
@@ -29,6 +30,7 @@ export class BrowserEngine implements Scraper {
 
   private async fetchSite(siteInfo: TSiteQuery) {
     const { site, selector } = siteInfo;
+    const loader = ora("Creating Browser").start();
 
     let context;
     if (!!this.loginProfile) {
@@ -38,17 +40,21 @@ export class BrowserEngine implements Scraper {
       context = await this.browser.newContext(devices["Desktop Chrome"]);
     }
 
+    loader.text = "创建页面中";
     const page = await context.newPage();
 
+    loader.text = "等待页面加载";
     await page.goto(site, { timeout: 30000, waitUntil: 'domcontentloaded' });
 
     if (selector) {
       // Wait for selectors to be present
       try {
+        loader.text = "等待选取元素出现";
         await page.waitForSelector(selector.title, { timeout: 50000 });
         await page.waitForSelector(selector.content, { timeout: 50000 });
       } catch (e) {
         console.warn(`Selectors not found for ${site}:`, e);
+        loader.fail("没有元素");
       }
 
       const allTitles = (await Promise.all(
@@ -58,8 +64,10 @@ export class BrowserEngine implements Scraper {
         (await page.$$(selector.content)).map(content => content.textContent())
       )).map(content => content?.trim());
 
+      loader.succeed("访问成功！");
       return this.paraIntersect(allTitles, allContents);
     } else {
+      loader.fail("访问失败！");
       return await (await page.$("body"))?.textContent() ?? "";
     }
 

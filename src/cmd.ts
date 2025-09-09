@@ -5,8 +5,10 @@ import notifier from 'node-notifier';
 import { BrowserEngine } from './engines/Browser.js';
 import { TSiteQuery } from './scraper.js';
 import { StartServer } from './server.js';
-import db, { diffLatest } from './dao.js';
+import db, { getSiteHist, getSites } from './dao.js';
 import { resolve } from 'path';
+import { select, checkbox } from '@inquirer/prompts';
+import { c, DB, diff } from './utils.js';
 
 program.name('swatcher')
   .description('watch sites defined in json file');
@@ -43,11 +45,30 @@ program.command('serve')
   .action(() => StartServer(3002));
 
 program.command('diff')
-  .argument('<file>', '配置文件')
-  .action(async (cfg: string) => {
-    const cfgs: Array<TSiteQuery> = JSON.parse(await readFile(cfg, 'utf8'));
-    for (const cfg of cfgs) {
-      await diffLatest(cfg);
+  .action(async () => {
+    try {
+      const sites = (await getSites()).map(site => ({ value: site.site }));
+      if (sites.length === 0) {
+        throw new Error('当前没有网站可供选择');
+      }
+      const site = await select({
+        message: `FROM: ${DB}\n选择一个网站`,
+        choices: sites,
+        loop: true
+      });
+      const hists = await getSiteHist(site);
+      const histSelected = await checkbox({
+        message: "选取两个需要比较的版本？",
+        choices: hists.map(hist => ({
+          value: hist.parsed,
+          name: new Date(hist.timestamp).toLocaleDateString()
+        })),
+        validate: choices => choices.length === 2
+      });
+      await diff(histSelected[0], histSelected[1]);
+    } catch (e) {
+      console.log('取消');
+      process.exit(1);
     }
   });
 
