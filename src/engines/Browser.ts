@@ -1,50 +1,43 @@
-import { Browser, devices, chromium } from "playwright";
+import { Browser, chromium, devices } from "playwright";
 import { Scraper, TSiteQuery } from "../scraper.js";
 import { getProfileState, saveProfileState, saveSite } from "../dao.js";
 import ora from 'ora';
 import { c, timeouts } from "../utils.js";
-import { modifierNames } from "chalk";
 
 export class BrowserEngine implements Scraper {
-  private browser;
-  private loginProfile;
-  private sites: Set<string> = new Set();
+  protected browser;
+  protected loginProfile;
+  protected sites: Set<string> = new Set();
 
   constructor(browser: Browser, login: string) {
     this.browser = browser;
     this.loginProfile = login;
   }
 
-  private format(text: string | null) {
+  public format(text: string | null) {
     if (!text) return "";
     return text.trim().replaceAll(/(\s){3,}/g, "$1");
   }
 
-  private docCompose(titles: string[], contents: string[], subpages: string[]) {
+  public docCompose(titles: string[], contents: string[], subpages: string[]) {
     let res = [];
-    const maxLen = Math.min(titles.length, contents.length, subpages.length);
+    const maxLen = Math.min(titles.length, contents.length, subpages.length === 0 ? titles.length : subpages.length);
     for (let i = 0; i < maxLen - 1; i++) {
-      res.push(`${titles[i]}\n\n${contents[i]}\n\n${subpages[i]}`);
+      res.push(`${titles[i]}\n\n${contents[i]}\n\n${subpages[i] || 'no content'}`);
     }
 
     return res.join("\n".repeat(3));
   }
 
-  private async fetchSite(siteInfo: TSiteQuery) {
+  public async fetchSite(siteInfo: TSiteQuery) {
     const { site, selector } = siteInfo;
 
     const o = ora(`准备访问：${siteInfo.site}`).start();
 
-    let context;
-    if (!!this.loginProfile) {
-      const state = JSON.parse(await getProfileState(this.loginProfile));
-      context = await this.browser.newContext({ ...devices["Desktop Chrome"], storageState: state });
-    } else {
-      context = await this.browser.newContext(devices["Desktop Chrome"]);
-    }
-
     o.text = "创建页面中";
-    const page = await context.newPage();
+    const ctx = await this.newCtx();
+
+    const page = await ctx.newPage();
 
     o.text = `等待 ${site} 加载`;
     await page.goto(site, { timeout: timeouts.SELECTOR, waitUntil: 'domcontentloaded' });
@@ -56,15 +49,14 @@ export class BrowserEngine implements Scraper {
       const allSubPages: Array<string> = [];
 
       if (selector.dig) {
-        o.text = `正在进一步提取页面 ${selector.dig.link}`;
-
         for (const lo of await page.locator(selector.dig.link).all()) {
+          o.text = `正在进一步提取页面 ${await lo.textContent()}`;
           await lo.click({ modifiers: ['ControlOrMeta'] });
-          const page = await context.waitForEvent('page');
+          const page = await ctx.waitForEvent('page');
           await page.waitForLoadState("networkidle");
-          const content = this.format(await page.locator(selector.dig?.body!).textContent({ timeout: timeouts.SELECTOR }) ?? "");
+          const content = this.format((await page.locator(selector.dig.body).getByRole("paragraph").allTextContents()).join("\n") ?? "");
           await page.close();
-          this.sleep(1500);
+          await this.sleep(Math.min(1000, Math.random() * 1500));
           allSubPages.push(content);
         }
       }
@@ -83,13 +75,13 @@ export class BrowserEngine implements Scraper {
     }
   }
 
-  private async sleep(ms: number) {
+  public async sleep(ms: number) {
     return new Promise(res => {
       setTimeout(res, ms);
     });
   }
 
-  private async saveOrIgnore(siteInfo: TSiteQuery, content: string, title: string) {
+  public async saveOrIgnore(siteInfo: TSiteQuery, content: string, title: string) {
     const { site } = siteInfo;
     try {
       return (await saveSite({
@@ -132,15 +124,16 @@ export class BrowserEngine implements Scraper {
     }
   }
 
-  public async doLogin(url: string, finishedURL?: string) {
-    const ctx = await this.browser.newContext();
+  public async newCtx() {
+    const state = JSON.parse(await getProfileState(this.loginProfile) || "{}");
+    return await this.browser.newContext({ ...devices['Desktop Chrome'], storageState: state });
+  }
+
+  public async doLogin(url: string) {
+    const ctx = await this.newCtx();
     const page = await ctx.newPage();
     await page.goto(url);
-    if (finishedURL) {
-      await page.waitForURL(finishedURL);
-    } else {
-      await page.waitForEvent('close', { timeout: timeouts.LOGIN });
-    }
+    await page.waitForEvent('close', { timeout: timeouts.LOGIN });
     return await saveProfileState(this.loginProfile, JSON.stringify(await ctx.storageState()));
   }
 
@@ -149,4 +142,4 @@ export class BrowserEngine implements Scraper {
 
     return new BrowserEngine(browser, loginProfile);
   }
-}
+};

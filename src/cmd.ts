@@ -93,10 +93,9 @@ program.command("clear")
 program.command("login")
   .argument("<profile>", "配置文件")
   .argument("<url>", "登录页面链接")
-  .argument("[succURL]", "登录页面跳转链接")
-  .action(async (profile: string, url: string, succURL?: string) => {
+  .action(async (profile: string, url: string) => {
     const engine = await BrowserEngine.create(resolve(profile), false);
-    await engine.doLogin(url, succURL);
+    await engine.doLogin(url);
     engine.stop();
   });
 

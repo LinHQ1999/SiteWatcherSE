@@ -1,0 +1,1 @@
+{"type":"array","items":{"type":"object","properties":{"site":{"type":"string"},"selector":{"type":"object","properties":{"title":{"type":"string"},"content":{"type":"string"},"dig":{"type":"object","properties":{"link":{"type":"string"},"body":{"type":"string"}},"required":["link","body"]}},"required":["title","content"]}},"required":["site"]}}
