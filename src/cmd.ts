@@ -122,18 +122,8 @@ program.command(('video'))
     await page.waitForLoadState('networkidle');
     for (activeIdx; activeIdx < list.length - 1; activeIdx++) {
       console.log(c.bgBlueBright(`当前${activeIdx}`));
-      await page.evaluate(() => {
-        const video = document.querySelector<HTMLVideoElement>('video');
-        if (!video) return;
-        video.play();
-        video.playbackRate = 2;
-        console.log('registered from playwright');
-        return new Promise(res => {
-          video.onended = res;
-        });
-      });
-      // await page.locator('.layui-layer-btn0').click({ timeout: timeouts.LOGIN });
-      console.log(c.cyanBright('下一步'));
+      await page.evaluate(() => document.querySelector('video')?.play());
+      await page.locator('.layui-layer-btn0').click({ timeout: 1000 * 60 * 30 });
       await list[activeIdx + 1].click({ timeout: timeouts.LOGIN });
       await page.waitForLoadState('networkidle');
     }
