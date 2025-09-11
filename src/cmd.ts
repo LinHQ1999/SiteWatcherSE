@@ -8,7 +8,7 @@ import { StartServer } from './server.js';
 import { clear, getSiteHist, getSites } from './dao.js';
 import { join, resolve } from 'path';
 import { select, checkbox, confirm } from '@inquirer/prompts';
-import { CliError, DB, diff } from './utils.js';
+import { c, CliError, DB, diff, timeouts } from './utils.js';
 import ora from 'ora';
 import { Type } from '@sinclair/typebox';
 
@@ -105,6 +105,38 @@ program.command("schema")
   .action(async (path: string) => {
     const schema = Type.Array(SiteQuery);
     await writeFile(join(resolve(path), "swatcher.schema.json"), JSON.stringify(schema), 'utf8');
+  });
+
+program.command(('video'))
+  .argument('<path>')
+  .argument('<url>')
+  .option('-i, --index <number>', '索引', parseInt)
+  .action(async (path: string, url: string, { index: i }: { index: number; }) => {
+    const engine = await BrowserEngine.create(path, false, 'firefox');
+    const ctx = await engine?.newCtx();
+    const page = await ctx?.newPage();
+    await page?.goto(url, { waitUntil: 'networkidle', timeout: timeouts.LOGIN });
+    const list = await page.locator(".video-title").all();
+    let activeIdx = i ?? list.findIndex(async li => /on/.test(await li.getAttribute('class') ?? '')) + 1;
+    await list[activeIdx].click();
+    await page.waitForLoadState('networkidle');
+    for (activeIdx; activeIdx < list.length - 1; activeIdx++) {
+      console.log(c.bgBlueBright(`当前${activeIdx}`));
+      await page.evaluate(() => {
+        const video = document.querySelector<HTMLVideoElement>('video');
+        if (!video) return;
+        video.play();
+        video.playbackRate = 2;
+        console.log('registered from playwright');
+        return new Promise(res => {
+          video.onended = res;
+        });
+      });
+      // await page.locator('.layui-layer-btn0').click({ timeout: timeouts.LOGIN });
+      console.log(c.cyanBright('下一步'));
+      await list[activeIdx + 1].click({ timeout: timeouts.LOGIN });
+      await page.waitForLoadState('networkidle');
+    }
   });
 
 program.parse();

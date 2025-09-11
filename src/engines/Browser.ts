@@ -1,4 +1,4 @@
-import { Browser, chromium, devices } from "playwright";
+import { Browser, chromium, devices, firefox } from "playwright";
 import { Scraper, TSiteQuery } from "../scraper.js";
 import { getProfileState, saveProfileState, saveSite } from "../dao.js";
 import ora from 'ora';
@@ -23,7 +23,7 @@ export class BrowserEngine implements Scraper {
     let res = [];
     const maxLen = Math.min(titles.length, contents.length, subpages.length === 0 ? titles.length : subpages.length);
     for (let i = 0; i < maxLen - 1; i++) {
-      res.push(`${titles[i]}\n\n${contents[i]}\n\n${subpages[i] || 'no content'}`);
+      res.push(`${titles[i]}\n\n${contents[i]}\n\n${subpages[i] || ''}`);
     }
 
     return res.join("\n".repeat(3));
@@ -40,7 +40,7 @@ export class BrowserEngine implements Scraper {
     const page = await ctx.newPage();
 
     o.text = `等待 ${site} 加载`;
-    await page.goto(site, { timeout: timeouts.SELECTOR, waitUntil: 'domcontentloaded' });
+    await page.goto(site, { timeout: timeouts.SELECTOR, waitUntil: 'networkidle' });
 
     if (selector) {
       o.text = `正在提取页面`;
@@ -137,8 +137,15 @@ export class BrowserEngine implements Scraper {
     return await saveProfileState(this.loginProfile, JSON.stringify(await ctx.storageState()));
   }
 
-  static async create(loginProfile = "", headless = true) {
-    const browser = await chromium.launch({ headless });
+  static async create(loginProfile = "", headless = true, type = 'chromium') {
+    let browser;
+    switch (type) {
+      case 'firefox':
+        browser = await firefox.launch({ headless });
+        break;
+      default:
+        browser = await chromium.launch({ headless });
+    }
 
     return new BrowserEngine(browser, loginProfile);
   }
