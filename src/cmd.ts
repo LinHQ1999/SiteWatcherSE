@@ -11,6 +11,7 @@ import { select, checkbox, confirm } from '@inquirer/prompts';
 import { c, CliError, DB, diff, timeouts } from './utils.js';
 import ora from 'ora';
 import { Type } from '@sinclair/typebox';
+import { Locator } from 'playwright';
 
 program.name('swatcher')
   .description('watch sites defined in json file');
@@ -93,8 +94,9 @@ program.command("clear")
 program.command("login")
   .argument("<profile>", "配置文件")
   .argument("<url>", "登录页面链接")
-  .action(async (profile: string, url: string) => {
-    const engine = await BrowserEngine.create(resolve(profile), false);
+  .option("--ff", "使用 firefox")
+  .action(async (profile: string, url: string, { ff }: { ff: boolean; }) => {
+    const engine = await BrowserEngine.create(resolve(profile), false, ff ? 'firefox' : 'chromium');
     await engine.doLogin(url);
     engine.stop();
   });
@@ -116,16 +118,59 @@ program.command(('video'))
     const ctx = await engine?.newCtx();
     const page = await ctx?.newPage();
     await page?.goto(url, { waitUntil: 'networkidle', timeout: timeouts.LOGIN });
+
+    async function configureVideo() {
+      await page.evaluate(async () => {
+        const video = document.querySelectorAll<HTMLVideoElement>('video');
+        if (!video) return;
+        let count = 0;
+
+        const trySet = setInterval(() => {
+          if (count > 10) clearInterval(trySet);
+          else {
+            Array.from(video).map(v => {
+              v.muted = true;
+              v.playbackRate = 2;
+
+            });
+            console.log('PW: try set video');
+            count++;
+          }
+        }, 1000);
+
+        video.forEach(v => v.play());
+        return;
+      });
+    }
+
     const list = await page.locator(".video-title").all();
-    let activeIdx = i ?? list.findIndex(async li => /on/.test(await li.getAttribute('class') ?? '')) + 1;
-    await list[activeIdx].click();
-    await page.waitForLoadState('networkidle');
+    let activeIdx = i ?? 0;
+    await engine.clickToCurrent(page, list[activeIdx]);
+    await configureVideo();
+    page.on('response', async (resp) => {
+      if ([302, 400].includes(resp.status())) {
+        await page.goBack();
+        await engine.clickToCurrent(page, list[activeIdx]);
+        console.log(c.bgRedBright(`测到页面跳转登录 ${new Date()} 转到 ${activeIdx}`));
+        await configureVideo();
+      }
+    });
     for (activeIdx; activeIdx < list.length - 1; activeIdx++) {
-      console.log(c.bgBlueBright(`当前${activeIdx}`));
-      await page.evaluate(() => document.querySelector('video')?.play());
-      await page.locator('.layui-layer-btn0').click({ timeout: 1000 * 60 * 30 });
-      await list[activeIdx + 1].click({ timeout: timeouts.LOGIN });
-      await page.waitForLoadState('networkidle');
+      console.log(c.bgBlueBright(`当前 ${activeIdx} ${await list[activeIdx].textContent()}`));
+      await configureVideo();
+      // 默认 2 小时
+      await page.locator('.layui-layer-btn0').click({ timeout: 1000 * 60 * 120 });
+      // 开始总量检测
+      /* const search = new URL(page.url()).searchParams;
+      const indexPage = await ctx.newPage();
+      await indexPage.goto(search.get('service') ?? '');
+      const indexList = await indexPage.locator("li").all();
+      const current = indexList.findIndex((li) => li.locator(`a[href*="${search.get('segId')}"]`));
+      const currentHours = parseFloat(await indexList[current].getByText("已学习").locator("span").textContent() ?? '0');
+      console.log(c.bgGray(`当前章节学习 ${currentHours} h`));
+      indexPage.close(); */
+
+      await engine.clickToCurrent(page, list[activeIdx + 1]);
     }
   });
 

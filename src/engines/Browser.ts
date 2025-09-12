@@ -1,4 +1,4 @@
-import { Browser, chromium, devices, firefox } from "playwright";
+import { Browser, BrowserContext, chromium, devices, firefox, Locator, Page } from "playwright";
 import { Scraper, TSiteQuery } from "../scraper.js";
 import { getProfileState, saveProfileState, saveSite } from "../dao.js";
 import ora from 'ora';
@@ -44,15 +44,14 @@ export class BrowserEngine implements Scraper {
 
     if (selector) {
       o.text = `正在提取页面`;
-      const allTitles = (await page.locator(selector.title).allTextContents()).map(this.format);
-      const allContents = (await page.locator(selector.content).allTextContents()).map(this.format);
+      const [allTitles, allContents] = (await Promise.all([page.locator(selector.title).allTextContents(), page.locator(selector.content).allTextContents()]))
+        .map(str => str.map(this.format));
       const allSubPages: Array<string> = [];
 
       if (selector.dig) {
         for (const lo of await page.locator(selector.dig.link).all()) {
           o.text = `正在进一步提取页面 ${await lo.textContent()}`;
-          await lo.click({ modifiers: ['ControlOrMeta'] });
-          const page = await ctx.waitForEvent('page');
+          const [_, page] = await this.clickToNewTab(ctx, lo);
           await page.waitForLoadState("networkidle");
           const content = this.format((await page.locator(selector.dig.body).getByRole("paragraph").allTextContents()).join("\n") ?? "");
           await page.close();
@@ -79,6 +78,20 @@ export class BrowserEngine implements Scraper {
     return new Promise(res => {
       setTimeout(res, ms);
     });
+  }
+
+  /**
+  * 点击跳转新页面
+  */
+  public clickToNewTab(ctx: BrowserContext, locator: Locator, timeout = 1000 * 60 * 30) {
+    return Promise.all([locator.click({ timeout, modifiers: ['ControlOrMeta'] }), ctx.waitForEvent('page')]);
+  }
+
+  /**
+  * 点击跳转当前页面
+  */
+  public clickToCurrent(page: Page, locator: Locator, timeout = 1000 * 60 * 30) {
+    return Promise.all([locator.click({ timeout }), page.waitForLoadState('networkidle')]);
   }
 
   public async saveOrIgnore(siteInfo: TSiteQuery, content: string, title: string) {
